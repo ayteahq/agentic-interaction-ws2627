@@ -1,88 +1,144 @@
-# agentic-interaction-ws2627
+# Exercise 1 - First Tool Call
 
-Agentic Human-AI Interaction - Universität Ulm - WS 2026/27
+Agentic Human-AI Interaction - Universität Ulm - WS 2026/27.
+Der Python-Agent beantwortet Kalenderfragen mit einer OpenAI-kompatiblen
+Chat-Completions-API und ausschließlich simulierten HTTP-Kalenderdaten.
 
-## Exercise 1 - First Tool Call
+## Voraussetzungen auf einem neuen Windows-Computer
 
-Der Kalender-Agent verwendet die OpenAI-kompatible Chat-Completions-API und
-liest ausschließlich simulierte Kalenderdaten per HTTP GET. Python 3.11 oder
-neuer ist erforderlich.
+- Python 3.11 oder neuer von https://www.python.org/downloads/ installieren,
+  einschließlich Python Launcher (`py`).
+- Git von https://git-scm.com/downloads installieren.
+- PowerShell sowie Zugang zum Übungsrepository und den Modell-/Datendiensten.
 
-### Einrichtung unter Windows (PowerShell)
+Installation prüfen:
 
 ```powershell
-cd C:\Users\erasl\agentic-interaction-ws2627
+py --version
+git --version
+```
+
+## Repository klonen
+
+Die Beispieladresse durch die URL des eigenen GitHub-Repositorys ersetzen.
+In einem vorhandenen Checkout diesen Schritt überspringen.
+
+```powershell
+cd $HOME
+git clone https://github.com/DEIN-GITHUB-NAME/agentic-interaction-ws2627.git
+cd agentic-interaction-ws2627
+```
+
+## Virtuelle Umgebung und Abhängigkeiten
+
+Im Repository ausführen. Bei einer neueren Python-Version `-3.11` entsprechend
+ersetzen. Eine bereits eingerichtete Umgebung kann weiterverwendet werden.
+
+```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-Bei einer neueren Python-Version `-3.11` entsprechend ersetzen. Die bereits
-vorhandene virtuelle Umgebung kann weiterverwendet werden.
+## Lokale Konfiguration
 
-In der lokalen `.env` müssen die vier Variablen `OPENAI_BASE_URL`, `MODEL`,
-`OPENAI_API_KEY` und `DATA_BASE_URL` mit den von der Übung bereitgestellten
-Werten gesetzt sein. Modell und Basisadressen haben keine Standardwerte.
-Bereits gesetzte Umgebungsvariablen haben Vorrang vor `.env`.
-Die `.env` und API-Schlüssel niemals veröffentlichen oder committen.
+Eine Datei namens `.env` im Repository-Hauptverzeichnis anlegen, beispielsweise
+mit `notepad .env`. Folgendes Schema eintragen und alle Platzhalter durch die
+von der Übung bereitgestellten Werte ersetzen:
 
-### Start
+```dotenv
+OPENAI_BASE_URL=https://MODELLDIENST.example/API-BASISPFAD
+MODEL=MODELLNAME_AUS_DER_UEBUNG
+OPENAI_API_KEY=DEIN_LOKALER_API_SCHLUESSEL
+DATA_BASE_URL=https://DATENDIENST.example/BASISPFAD
+```
+
+Dies sind ausschließlich Platzhalter, keine funktionierende Konfiguration.
+Die vollständige Basisadresse des OpenAI-kompatiblen Dienstes verwenden;
+`/chat/completions` ergänzt das SDK. Der Datendienst muss die simulierten Dateien
+unter `{DATA_BASE_URL}/calendar/{YYYY-MM-DD}.json` bereitstellen.
+Es gibt keine festgelegten Modellnamen oder Dienstadressen im Anwendungscode.
+Bereits gesetzte Umgebungsvariablen haben Vorrang vor `.env` (`override=False`),
+auch leere Variablen; erforderliche leere Werte werden als Fehler behandelt.
+`.env` niemals veröffentlichen oder committen. Schlüssel nicht in Quellcode,
+Screenshots oder Konsolenausgaben übernehmen.
+
+## Start
+
+Ohne Aktivierung der virtuellen Umgebung:
+
+```powershell
+.\.venv\Scripts\python.exe -m agent "Was steht am 29.10.2026 im Kalender?"
+.\.venv\Scripts\python.exe -m agent --help
+```
+
+Alternativ aktivieren und den vorgesehenen Einstiegspunkt verwenden:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 python -m agent "Was steht am 29.10.2026 im Kalender?"
 ```
 
-Ohne Aktivierung:
+Falls PowerShell die Aktivierung blockiert, den Aufruf ohne Aktivierung verwenden.
+
+## Ablauf und Fehler
+
+1. `load_config()` lädt die Repository-Konfiguration und prüft die Pflichtwerte.
+2. `run_agent()` übergibt Anfrage und Function-Calling-Beschreibung an das Modell.
+   Das Modell wählt das Datum und ruft `get_calendar_events` auf.
+3. `execute_tool()` validiert Name und JSON-Argumente. `get_calendar_events()`
+   liest die simulierten Daten per HTTP GET und verarbeitet das JSON. Zusätzlich
+   berechnet `get_weekday()` mit `datetime.date.weekday()` und einer festen deutschen
+   Wochentagstabelle das Feld `weekday_de`. Dieses steht für jedes gültige Datum
+   auch bei fehlenden Kalenderdaten oder Abruffehlern im Tool-Ergebnis.
+   Das Modell soll Wochentage ausschließlich aus diesem Feld übernehmen und nur
+   bei ausdrücklichen Wochentagsfragen erwähnen. Angaben innerhalb der abgerufenen
+   Kalenderdaten sind für die Wochentagsberechnung nicht maßgeblich.
+4. Das Modell erhält seine Tool-Aufrufe sowie die Ergebnisse als Tool-Nachrichten
+   mit passender `tool_call_id`. Ein zweiter Modellaufruf erzeugt die deutsche Antwort.
+
+HTTP 404 bedeutet fehlende Daten (`not_found`), nicht einen nachweislich leeren
+Kalender. Erfolgreich gelesene Daten mit leerer Terminliste sind dagegen ein
+leerer Kalender. Andere Toolfehler werden dem Modell zur Erklärung übergeben.
+Die Antwort steht auf stdout, erfolgreiche Abläufe liefern Exit-Code 0.
+Konfigurations-, Modell- und nicht behandelte Ausführungsfehler liefern Exit-Code 1
+mit einer sicheren Meldung auf stderr. Fehlerhafte CLI-Argumente liefern Exit-Code 2.
+Es werden keine echten Kalender oder externen Konten verändert.
+
+## JSONL-Logging
+
+Jeder Aufruf erstellt `logs/<UUID>.jsonl`, auch bei fehlgeschlagenen Runs.
+Jede Zeile ist ein JSON-Objekt mit `ts`, `run_id`, `event`, `tool`, `args`, `ok`,
+`model` und `duration_ms`. Zeitstempel sind ISO-8601 in UTC mit Zeitzone.
+Dauern werden mit dem monotonen Timer `time.perf_counter()` gemessen: bei
+Tool-Ereignissen ab Beginn der Toolverarbeitung, sonst ab Beginn des Runs.
+Nach jeder Zeile wird der Dateipuffer geleert; am Ende wird die Datei geschlossen.
+
+Normale erfolgreiche Runs enthalten `user_task`, `tool_call`, `tool_result`, `final`.
+`--help` zeigt die Hilfe, liefert Exit-Code 0 und schreibt ein `final`-Ereignis
+mit `code: help`, ohne die API aufzurufen. Fehler erzeugen `error` mit einem
+klassifizierten Code: `configuration`, `model_response`, `tool_error` oder einem
+spezifischen Verbindungs-/HTTP-/CLI-Fehlercode.
+
+`tool` enthält den tatsächlich angeforderten Function-Toolnamen, sonst `null`.
+`args` enthält ausschließlich das Datum im Format YYYY-MM-DD. `ok: null`
+beim Toolaufruf bedeutet, dass dessen Ergebnis noch aussteht. HTTP 404 ist ein
+reguläres Ergebnis (`status: not_found`, `ok: true`). Andere Toolfehler ergeben
+`ok: false` und ein `error`-Ereignis. Ein anschließendes `final` bestätigt die
+Antwortausgabe, nicht den Erfolg aller Datenabrufe.
+
+`model` ist der konfigurierte Modellname, bei fehlender Konfiguration gegebenenfalls
+`null`. Rohtexte von Prompts/Antworten, Kalenderinhalte, URLs, Header und fremde
+Exception-Texte werden nicht geloggt. Bekannte Geheimnisse aus der Umgebung werden
+auch in Modell- und Toolnamen redigiert. Ungültige oder sensitive Toolnamen werden
+durch einen Marker ersetzt; gültige unbekannte Toolnamen bleiben zur Diagnose erhalten.
+`.env`, `.venv/` und `logs/` sind durch `.gitignore` ausgeschlossen.
+Falls das Dateisystem keine Datei anlegen oder schreiben kann, ist vollständiges
+Logging technisch nicht möglich.
+
+## Automatisierte Tests
+
+Offline-Regressionsprüfungen ohne echte API-Aufrufe:
 
 ```powershell
-.\.venv\Scripts\python.exe -m agent "Was steht am 29.10.2026 im Kalender?"
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
 ```
-
-### Ablauf und Funktionen
-
-1. `load_config()` lädt `.env` aus dem Repository mit `override=False` und prüft
-   die erforderlichen Einstellungen, ohne deren Werte auszugeben.
-2. `run_agent()` übergibt Anfrage und Toolbeschreibung an das Modell. Das Modell
-   bestimmt das Datum und erzeugt einen Aufruf von `get_calendar_events`.
-3. `execute_tool()` prüft Toolname und JSON-Argumente.
-4. `get_calendar_events()` validiert das Datum und liest per GET
-   `{DATA_BASE_URL}/calendar/{YYYY-MM-DD}.json`. JSON-Daten werden unter `data`
-   zurückgegeben. HTTP 404 liefert `not_found`, andere Abruffehler `error`.
-5. Die Assistant-Nachricht mit den Tool-Aufrufen und je eine Tool-Nachricht mit
-   passender `tool_call_id` werden dem Modell übergeben. Der zweite Modellaufruf
-   erzeugt die deutsche Antwort; weitere Tool-Aufrufe sind dabei deaktiviert.
-
-Die endgültige Antwort steht auf stdout, bei erfolgreichem Ablauf ist der
-Exit-Code 0. Technische Fehler des Modellzugriffs oder der Konfiguration stehen
-auf stderr und führen zu Exit-Code 1. Fehlende Kalenderdaten und Kalenderabruffehler
-werden als Tool-Ergebnis vom Modell erklärt; sie beenden den Ablauf nicht vorzeitig.
-Es werden keine Kalender verändert und keine Logs geschrieben. Die Kalenderabfrage
-verwendet keinen API-Schlüssel; dieser wird nur dem Modell-Client übergeben.
-
-### JSONL-Logging
-
-Jeder Programmaufruf erstellt `logs/<run_id>.jsonl` mit einer neuen UUID. Jede
-Zeile ist ein JSON-Objekt mit `ts` (UTC mit Zeitzone), `run_id`, `event`, `tool`,
-`args`, `ok`, `model` und `duration_ms`. `model` ist der konfigurierte Modellname;
-ist die Konfiguration unvollständig, kann das Feld `null` sein. `tool` ist bei
-Tool-Ereignissen `get_calendar_events`, sonst `null`. `args` enthält ausschließlich
-das Datum im Format YYYY-MM-DD. `ok: null` bedeutet, dass das Ergebnis beim
-Tool-Aufruf noch aussteht.
-
-Ereignisse: `user_task`, `tool_call`, `tool_result`, `final` und bei Fehlern
-`error`. HTTP 404 ist ein reguläres Ergebnis (`status: not_found`, `ok: true`),
-kein technischer Fehler. Andere Tool-Fehler ergeben `ok: false` und zusätzlich
-ein `error`-Ereignis; der zweite Modellaufruf erklärt sie weiterhin auf Deutsch.
-`final` bestätigt die Ausgabe der Antwort, nicht den Erfolg aller Datenabrufe.
-
-Die Dauer wird mit dem monotonen Timer `time.perf_counter()` gemessen: bei
-Tool-Ereignissen ab Beginn der Tool-Verarbeitung, sonst ab Beginn des Runs.
-Nach jeder Zeile wird der Dateipuffer geleert, und die Datei wird auch bei Fehlern
-geschlossen. Falls das Dateisystem keine Logdatei anlegen oder schreiben kann,
-ist eine vollständige Protokollierung technisch nicht möglich.
-
-Aus Sicherheitsgründen protokollieren wir keine Rohtexte der Anfrage oder Antwort,
-Kalenderinhalte, `.env`-Inhalte, URLs, HTTP-Header oder Exception-Texte. Fehlercodes
-und Statuswerte stammen aus einer festen Auswahlliste. So können auch über Prompts,
-Tool-Antworten oder Fehlermeldungen eingeschleuste Zugangsdaten nicht in Logs gelangen.
-`logs/` und `.env` werden weiterhin durch `.gitignore` ausgeschlossen.
